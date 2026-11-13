@@ -33,7 +33,10 @@ WEBAPP_URL = os.getenv("WEBAPP_URL", "https://aivazzzka.github.io/AiTrats/").str
 def get_start_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="Открыть AiTrats", web_app=WebAppInfo(url=WEBAPP_URL))]
+            [
+                InlineKeyboardButton(text="Открыть AiTrats", web_app=WebAppInfo(url=WEBAPP_URL)),
+                InlineKeyboardButton(text="Открыть в браузере", url=WEBAPP_URL),
+            ]
         ]
     )
 
