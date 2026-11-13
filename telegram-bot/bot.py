@@ -1,26 +1,39 @@
 import asyncio
 import logging
 import os
+from pathlib import Path
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import CommandStart
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message, WebAppInfo
 
+
+def load_env_file() -> None:
+    env_path = Path(__file__).resolve().parent / ".env"
+    if not env_path.exists():
+        return
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+load_env_file()
 logging.basicConfig(level=logging.INFO)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
-WEBAPP_URL = os.getenv("WEBAPP_URL", "https://<username>.github.io/<repo>/").strip()
+WEBAPP_URL = os.getenv("WEBAPP_URL", "https://aivazzzka.github.io/AiTrats/").strip()
 
 
-def get_webapp_keyboard() -> InlineKeyboardMarkup:
+def get_start_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="Открыть AiTrats",
-                    web_app=WebAppInfo(url=WEBAPP_URL),
-                )
-            ]
+            [InlineKeyboardButton(text="Открыть AiTrats", web_app=WebAppInfo(url=WEBAPP_URL))]
         ]
     )
 
@@ -31,9 +44,8 @@ dp = Dispatcher()
 @dp.message(CommandStart())
 async def cmd_start(message: Message) -> None:
     await message.answer(
-        "Привет! 👋\n\n"
-        "Это бот AiTrats. Нажмите кнопку ниже, чтобы открыть веб-интерфейс.",
-        reply_markup=get_webapp_keyboard(),
+        "Твой финансовый дашборд:",
+        reply_markup=get_start_keyboard(),
     )
 
 
@@ -54,6 +66,7 @@ async def main() -> None:
         )
 
     bot = Bot(token=BOT_TOKEN)
+    await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 
 

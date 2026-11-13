@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aitrats-v1';
+const CACHE_NAME = 'aitrats-v2';
 const ASSETS = [
   './',
   './index.html',
