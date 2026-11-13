@@ -131,6 +131,13 @@
   .badge-savings{background:var(--green-bg);color:#6ee7b7;border-color:rgba(16,185,129,.35)}
   .notice{background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);color:#fcd34d;border-radius:12px;padding:10px 12px;font-size:13px;margin-top:10px}
   .notice.error{background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.35);color:#fca5a5}
+
+  .top-control-btn{width:36px;height:36px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--muted);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:all .18s ease;flex:0 0 auto}
+  .top-control-btn:hover{background:var(--hover);color:var(--text);border-color:#475569}
+  .top-control-btn svg{width:16px;height:16px;display:block}
+  .app.app-minimized .tabs,.app.app-minimized section.tab,.app.app-minimized footer{display:none !important}
+  .app.app-minimized header{margin-bottom:0;padding-bottom:0;border-bottom:none}
+
   .modal-overlay{position:fixed;inset:0;background:rgba(2,6,23,.7);display:none;align-items:center;justify-content:center;z-index:1000;padding:20px}
   .modal-overlay.show{display:flex}
   .modal{background:var(--card);border:1px solid var(--border);border-radius:16px;max-width:760px;width:100%;max-height:90vh;overflow:auto;padding:22px;box-shadow:0 20px 50px rgba(0,0,0,.45)}
@@ -1823,6 +1830,21 @@
     cloudConnect(true);
   } else {
     updateSyncIndicator();
+  }
+
+
+  const minimizeAppBtn = document.getElementById('minimizeAppBtn');
+  const appRoot = document.querySelector('.app');
+  if (minimizeAppBtn && appRoot) {
+    const setMinimized = (min) => {
+      appRoot.classList.toggle('app-minimized', !!min);
+      minimizeAppBtn.title = min ? '??????????' : '????????';
+      minimizeAppBtn.setAttribute('aria-label', min ? '??????????' : '????????');
+      minimizeAppBtn.innerHTML = min
+        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"></rect></svg>'
+        : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"></line></svg>';
+    };
+    minimizeAppBtn.addEventListener('click', () => setMinimized(!appRoot.classList.contains('app-minimized')));
   }
 
   if ('serviceWorker' in navigator) {
