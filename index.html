@@ -234,6 +234,16 @@
     </div>
 
     <div class="panel">
+      <div class="panel-title"><div class="panel-title-left"><span class="dot" style="background:var(--amber)"></span> Внеплановая трата за сегодня</div></div>
+      <div class="muted mb8">Быстрый учёт спонтанных расходов без создания плановой категории. Сумма сразу вычитается из общего доступного баланса.</div>
+      <div class="row">
+        <div class="field"><label for="unplannedName">Название</label><input type="text" id="unplannedName" placeholder="Например: Такси"></div>
+        <div class="field" style="max-width:220px"><label for="unplannedAmount">Сумма (₽)</label><input type="number" id="unplannedAmount" min="0" step="1" inputmode="numeric" placeholder="0"></div>
+        <div class="field" style="flex:0 0 auto"><label>&nbsp;</label><button class="btn btn-primary" id="addUnplannedBtn">Добавить</button></div>
+      </div>
+    </div>
+
+    <div class="panel">
       <div class="panel-title"><div class="panel-title-left"><span class="dot" style="background:var(--purple)"></span> История операций текущего периода</div></div>
       <div class="row mb8"><div class="field" style="max-width:280px"><label for="filterCat">Фильтр по категории</label><select id="filterCat"></select></div></div>
       <div id="expenseList" class="expense-list"></div>
@@ -559,7 +569,7 @@
     const dcat=st.categories.find(c=>c.debtLinked); if(dcat && st.debt.monthly>0) dcat.budget=st.debt.monthly;
 
     const catIds=new Set(st.categories.map(c=>c.id));
-    if(Array.isArray(p.expenses)) st.expenses=p.expenses.map(e=>({id:e.id||uid(), amount:clamp0(e.amount), categoryId:catIds.has(e.categoryId)?e.categoryId:null, comment:String(e.comment||''), date:e.date||new Date().toISOString()}));
+    if(Array.isArray(p.expenses)) st.expenses=p.expenses.map(e=>({id:e.id||uid(), amount:clamp0(e.amount), categoryId:catIds.has(e.categoryId)?e.categoryId:null, comment:String(e.comment||''), name:String(e.name||''), unplanned:!!e.unplanned, date:e.date||new Date().toISOString()}));
     return st;
   }
 
@@ -864,7 +874,7 @@
   function totalIncome(){ return state.incomeSources.reduce((s,i)=>s+num(i.amount),0); }
   function spentForCategory(catId){ return currentPeriodExpenses().filter(e=>e.categoryId===catId).reduce((s,e)=>s+num(e.amount),0); }
   function totalSavedForCategory(catId){ return (state.expenses||[]).filter(e=>e.categoryId===catId).reduce((s,e)=>s+num(e.amount),0); }
-  function visibleExpenses(){ const ids=new Set(visibleCategories().map(c=>c.id)); return currentPeriodExpenses().filter(e=>ids.has(e.categoryId)); }
+  function visibleExpenses(){ const ids=new Set(visibleCategories().map(c=>c.id)); return currentPeriodExpenses().filter(e=> (e.unplanned && e.categoryId==null) || ids.has(e.categoryId)); }
   function totalSpent(){ return visibleExpenses().reduce((s,e)=>s+num(e.amount),0); }
   function getTypeA(){ return visibleCategories().filter(c=>c.kind==='fixed'); }
   function getTypeB(){ return visibleCategories().filter(c=>c.kind==='variable'); }
@@ -1036,9 +1046,10 @@
   function syncDebtCategoryBudget(){ const dcat=state.categories.find(c=>c.debtLinked); if(dcat) dcat.budget=clamp0(state.debt.monthly); }
 
   function renderFilterSelect(){
-    const cats=visibleCategories(); const cur=filterCat.value;
-    filterCat.innerHTML = '<option value="all">Все категории</option>' + cats.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
-    if([...filterCat.options].some(o=>o.value===cur)) filterCat.value=cur; else filterCat.value='all';
+    const cur=filterCat.value||'all';
+    const opts = visibleCategories().map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
+    filterCat.innerHTML='<option value="all">??? ?????????</option><option value="__unplanned">??????????? ?????</option>' + opts;
+    if([...filterCat.options].some(o=>o.value===cur)) filterCat.value=cur;
   }
   filterCat.addEventListener('change', renderExpenses);
 
@@ -1174,7 +1185,18 @@
         <div style="display:flex;align-items:center;gap:8px"><div style="font-weight:700">${pctLabel}%</div><button class="icon-btn" data-cat-edit="${cat.id}" title="Редактировать">✎</button></div>
       </div>`;
 
-    const actions = (!editing) ? (cat.debtLinked ? '' : `<div class="actions"><button class="btn btn-danger btn-sm" data-cat-del="${cat.id}">Удалить</button></div>`) : (!cat.debtLinked ? `<div class="actions"><button class="btn btn-danger btn-sm" data-cat-del="${cat.id}">Удалить</button></div>` : '');
+        let actionsHtml = '';
+    if(!editing){
+      const parts = [];
+      if(typeKey !== 'daily' && !cat.debtLinked && ownLeft > 0 && budget > 0){
+        parts.push(`<button class="btn btn-green btn-sm" data-cat-pay="${cat.id}" title="???????? ??? ????????/??????? ? ??????? ???????">????????</button>`);
+      }
+      if(!cat.debtLinked){ parts.push(`<button class="btn btn-danger btn-sm" data-cat-del="${cat.id}">???????</button>`); }
+      if(parts.length) actionsHtml = `<div class="actions">${parts.join('')}</div>`;
+    } else {
+      if(!cat.debtLinked) actionsHtml = `<div class="actions"><button class="btn btn-danger btn-sm" data-cat-del="${cat.id}">???????</button></div>`;
+    }
+    const actions = actionsHtml;
 
     return `<div class="cat-card ${typeKey!=='daily' ? 'compact' : ''}" data-cat-card="${cat.id}">
       ${head}
@@ -1219,6 +1241,16 @@
       ui.editCatId=null; save(); renderAll();
     }));
     attachOutsideSave(limitsCats, `[data-cat-card="${ui.editCatId}"]`, ()=>{ if(ui.editCatId) saveCatEdit(ui.editCatId,true); });
+
+    limitsCats.querySelectorAll('[data-cat-pay]').forEach(b=>b.addEventListener('click',(e)=>{
+      e.stopPropagation();
+      const cat = catById(b.dataset.catPay);
+      if(!cat) return;
+      const budget=num(cat.budget), spent=spentForCategory(cat.id), ownLeft=budget-spent;
+      if(ownLeft<=0) return;
+      state.expenses.unshift({id:uid(), amount:Math.round(ownLeft), categoryId:cat.id, comment:'?????? (????)', date:new Date().toISOString()});
+      save(); renderAll();
+    }));
 
     const addCatCard=document.getElementById('addCatCard');
     if(addCatCard) addCatCard.addEventListener('click',()=>{ ui.showCatAdd=true; ui.editCatId=null; renderCategories(); setTimeout(()=>{ const n=document.getElementById('newCatName'); if(n) n.focus(); },0); });
@@ -1316,15 +1348,35 @@
 
   function renderExpenses(){
     const visIds=new Set(visibleCategories().map(c=>c.id)); const f=filterCat.value||'all';
-    const list=currentPeriodExpenses().filter(e=>visIds.has(e.categoryId) && (f==='all'||e.categoryId===f));
-    if(!list.length){ expenseList.innerHTML='<div class="empty">Операций в текущем периоде пока нет.</div>'; return; }
+    const list=currentPeriodExpenses().filter(e=>{
+      const isUnplanned = !!(e.unplanned && e.categoryId==null);
+      const inScope = isUnplanned || visIds.has(e.categoryId);
+      if(!inScope) return false;
+      if(f==='all') return true;
+      if(f==='__unplanned') return isUnplanned;
+      return e.categoryId===f;
+    });
+    if(!list.length){ expenseList.innerHTML='<div class="empty">???????? ? ??????? ??????? ???? ???.</div>'; return; }
     expenseList.innerHTML=list.map(e=>{
-      const cat=catById(e.categoryId); const d=new Date(e.date);
+      const isUnplanned = !!(e.unplanned && e.categoryId==null);
+      const cat=catById(e.categoryId);
+      const title = isUnplanned ? (e.name || e.comment || '??????????? ?????') : (cat?cat.name:'?????????');
+      const sub = isUnplanned ? ((e.name && e.comment && e.comment!==e.name) ? e.comment : '??????????? ?????') : (e.comment || '');
+      const d=new Date(e.date);
       const dateStr=isNaN(d)?'':new Intl.DateTimeFormat('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}).format(d);
-      return `<div class="expense-item"><div><div class="e-main">${esc(cat?cat.name:'Категория')}</div><div class="e-sub">${e.comment?esc(e.comment):'<span class="muted">Без комментария</span>'} · ${dateStr}</div></div>
-        <div class="e-amt">− ${fmt(e.amount)}</div><button class="btn btn-danger btn-sm" data-del-exp="${e.id}" title="Удалить">✕</button></div>`;
+      return `<div class="expense-item"><div><div class="e-main">${esc(title)}${isUnplanned?' <span class="badge" style="background:rgba(245,158,11,.15);color:#fbbf24;border:1px solid rgba(245,158,11,.3)">???????</span>':''}</div><div class="e-sub">${sub?esc(sub):'<span class="muted">??? ???????????</span>'} ? ${dateStr}</div></div>
+        <div class="e-amt">? ${fmt(e.amount)}</div><button class="btn btn-danger btn-sm" data-del-exp="${e.id}" title="???????">?</button></div>`;
     }).join('');
-    expenseList.querySelectorAll('[data-del-exp]').forEach(btn=>btn.addEventListener('click',()=>{ state.expenses=state.expenses.filter(e=>e.id!==btn.dataset.delExp); save(); renderAll(); }));
+    expenseList.querySelectorAll('[data-del-exp]').forEach(btn=>btn.addEventListener('click',()=>{
+      const exp = state.expenses.find(e=>e.id===btn.dataset.delExp);
+      if(exp){
+        const debtCat = state.categories.find(c=>c.debtLinked);
+        if(debtCat && exp.categoryId===debtCat.id && exp.comment==='?????? ?? ?????'){
+          state.debt.paid = Math.max(0, clamp0(state.debt.paid) - clamp0(exp.amount));
+        }
+      }
+      state.expenses=state.expenses.filter(e=>e.id!==btn.dataset.delExp); save(); renderAll();
+    }));
   }
 
   function renderDashboard(){
@@ -1392,8 +1444,32 @@
     debtMonthlyInp.addEventListener(ev,()=>commitDebtSettings('monthly'));
     debtMonthsInp.addEventListener(ev,()=>commitDebtSettings('months'));
   });
-  payBtn.addEventListener('click',()=>{ const monthly=clamp0(state.debt.monthly), total=clamp0(state.debt.total); if(monthly<=0||total<=0) return; state.debt.paid=Math.min(total, clamp0(state.debt.paid)+monthly); save(); renderAll(); });
-  undoPayBtn.addEventListener('click',()=>{ const monthly=clamp0(state.debt.monthly); if(monthly<=0) return; state.debt.paid=Math.max(0, clamp0(state.debt.paid)-monthly); save(); renderAll(); });
+  payBtn.addEventListener('click',()=>{
+    const monthly=clamp0(state.debt.monthly), total=clamp0(state.debt.total);
+    if(monthly<=0||total<=0) return;
+    const before=clamp0(state.debt.paid);
+    const payAmt=Math.min(monthly, Math.max(0,total-before));
+    if(payAmt<=0) return;
+    state.debt.paid=Math.min(total, before+payAmt);
+    const debtCat = state.categories.find(c=>c.debtLinked);
+    if(debtCat){
+      state.expenses.unshift({id:uid(), amount:payAmt, categoryId:debtCat.id, comment:'?????? ?? ?????', date:new Date().toISOString()});
+    }
+    save(); renderAll();
+  });
+  undoPayBtn.addEventListener('click',()=>{
+    const monthly=clamp0(state.debt.monthly);
+    if(monthly<=0) return;
+    const debtCat = state.categories.find(c=>c.debtLinked);
+    let undoneAmt=0;
+    if(debtCat){
+      const idx = state.expenses.findIndex(e=> e.categoryId===debtCat.id && e.comment==='?????? ?? ?????' && inCurrentPeriod(e.date));
+      if(idx!==-1){ undoneAmt = clamp0(state.expenses[idx].amount); state.expenses.splice(idx,1); }
+    }
+    if(undoneAmt<=0) undoneAmt = Math.min(monthly, clamp0(state.debt.paid));
+    state.debt.paid=Math.max(0, clamp0(state.debt.paid)-undoneAmt);
+    save(); renderAll();
+  });
 
   // notes
   const notesArea=document.getElementById('notesArea'), notesStatus=document.getElementById('notesStatus'), clearNotesBtn=document.getElementById('clearNotesBtn');
@@ -1784,6 +1860,26 @@
     else periodModal.classList.remove('show');
   }
 
+
+  function addUnplannedExpense(){
+    const nameEl=document.getElementById('unplannedName');
+    const amtEl=document.getElementById('unplannedAmount');
+    const name=((nameEl&&nameEl.value)||'').trim();
+    const amount=Math.abs(parseIntSafe(amtEl?amtEl.value:0));
+    if(!name){ alert('??????? ???????? ??????????? ?????.'); return; }
+    if(!amount){ alert('??????? ????? ????? (?).'); return; }
+    state.expenses.unshift({id:uid(), amount, categoryId:null, name, comment:name, unplanned:true, date:new Date().toISOString()});
+    if(nameEl) nameEl.value='';
+    if(amtEl) amtEl.value='';
+    save(); renderAll();
+  }
+  const addUnplannedBtn=document.getElementById('addUnplannedBtn');
+  if(addUnplannedBtn) addUnplannedBtn.addEventListener('click', addUnplannedExpense);
+  const unplannedAmountEl=document.getElementById('unplannedAmount');
+  if(unplannedAmountEl) unplannedAmountEl.addEventListener('keydown',(e)=>{ if(e.key==='Enter'){ e.preventDefault(); addUnplannedExpense(); } });
+  const unplannedNameEl=document.getElementById('unplannedName');
+  if(unplannedNameEl) unplannedNameEl.addEventListener('keydown',(e)=>{ if(e.key==='Enter'){ e.preventDefault(); addUnplannedExpense(); } });
+
   function renderAll(){
     checkPeriodReset();
     debtToggle.checked=!!state.debt.enabled;
@@ -1836,6 +1932,7 @@
   const minimizeAppBtn = document.getElementById('minimizeAppBtn');
   const appRoot = document.querySelector('.app');
   if (minimizeAppBtn && appRoot) {
+    const isDesktopApp = () => !!(window.pywebview && window.pywebview.api && typeof window.pywebview.api.minimize === 'function');
     const setMinimized = (min) => {
       appRoot.classList.toggle('app-minimized', !!min);
       minimizeAppBtn.title = min ? '??????????' : '????????';
@@ -1844,7 +1941,13 @@
         ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"></rect></svg>'
         : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"></line></svg>';
     };
-    minimizeAppBtn.addEventListener('click', () => setMinimized(!appRoot.classList.contains('app-minimized')));
+    minimizeAppBtn.addEventListener('click', async () => {
+      if (isDesktopApp()) {
+        try { await window.pywebview.api.minimize(); } catch (e) {}
+        return;
+      }
+      setMinimized(!appRoot.classList.contains('app-minimized')));
+    });
   }
 
   if ('serviceWorker' in navigator) {
